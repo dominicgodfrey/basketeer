@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+ENV/
+
+# Dist / build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Tests / type-check caches
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# Env / secrets — never commit
+.env
+.env.*
+!.env.example
+
+# Local data (DB dumps, scraped fixtures, logs)
+data/
+*.log
+
+# Node / frontend (when it lands)
+node_modules/
+dist/
+.vite/
+
+# IDE / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
