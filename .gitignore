@@ -28,8 +28,9 @@ htmlcov/
 .env.*
 !.env.example
 
-# Local data (DB dumps, scraped fixtures, logs)
-data/
+# Local data (DB dumps, scraped fixtures, logs). Root-anchored so it doesn't
+# eat `backend/app/data/` (the translation/ingestion module).
+/data/
 *.log
 
 # Node / frontend (when it lands)
