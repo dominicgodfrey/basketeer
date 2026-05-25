@@ -39,6 +39,11 @@ class VectorStore(Protocol):
         """Insert or update records by id."""
         ...
 
+    def fetch(self, ids: list[str]) -> list[VectorRecord]:
+        """Return records matching the given ids, in the same order as requested.
+        Missing ids are silently omitted; callers check for length mismatch."""
+        ...
+
     def query(
         self,
         vector: list[float],

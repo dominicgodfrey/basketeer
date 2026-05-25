@@ -91,5 +91,25 @@ def test_unsupported_filter_operator_raises() -> None:
         store.query([1.0], filter={"season": {"$ne": 2020}})
 
 
+def test_fetch_returns_records_in_requested_order() -> None:
+    store = InMemoryVectorStore()
+    store.upsert(
+        [
+            VectorRecord(id="a", vector=[1.0], metadata={"name": "A"}),
+            VectorRecord(id="b", vector=[2.0], metadata={"name": "B"}),
+            VectorRecord(id="c", vector=[3.0], metadata={"name": "C"}),
+        ]
+    )
+    fetched = store.fetch(["c", "a"])
+    assert [r.id for r in fetched] == ["c", "a"]
+
+
+def test_fetch_silently_omits_missing_ids() -> None:
+    store = InMemoryVectorStore()
+    store.upsert([VectorRecord(id="a", vector=[1.0])])
+    fetched = store.fetch(["a", "nonexistent"])
+    assert [r.id for r in fetched] == ["a"]
+
+
 def test_in_memory_store_satisfies_protocol() -> None:
     assert isinstance(InMemoryVectorStore(), VectorStore)

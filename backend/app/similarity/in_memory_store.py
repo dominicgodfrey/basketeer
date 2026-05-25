@@ -21,6 +21,9 @@ class InMemoryVectorStore:
         for record in records:
             self._records[record.id] = record
 
+    def fetch(self, ids: list[str]) -> list[VectorRecord]:
+        return [self._records[i] for i in ids if i in self._records]
+
     def query(
         self,
         vector: list[float],
