@@ -251,10 +251,17 @@ Build the four primitives behind clean interfaces, then wire them into a ReAct a
 
 ## Division of labor
 
-- **Dominic (full-stack/AI/ML)**: data ingestion, translation layer, embedding, agent loop, primitives, sandbox integration, prompt engineering, cost optimization
-- **Friend (frontend/SWE)**: React UI for comp finder, query input, result render components (comp cards, ranked tables, narrative display), basic FastAPI endpoint plumbing once primitives exist
+- **Dominic (full-stack/AI/ML)**: translation layer, embedding (vector construction), agent loop, the four primitives (modulo `query_stats` SQL generation, which depends on the schema), sandbox integration, LLM routing + prompt caching, intent classifier, result caching, cost optimization
+- **Friend (frontend/SWE + DB foundation)**:
+  - **Frontend**: React UI for comp finder, query input, result render components (comp cards, ranked tables, narrative display), `result_type` dispatch, loading states, query history
+  - **Postgres DB foundation**: SQLAlchemy models for `players`/`seasons`/`contracts`/`teams`, Alembic migrations, the read-only Postgres role used by the agent's `query_stats` primitive, basic FastAPI endpoint plumbing once primitives exist
+  - **Data ingestion** (depends on the schema being in place): `nba_api`, basketball-reference, collegebasketballdata.com, Spotrac scrapers; player ID resolution across sources
 
-The contract: the agent's response payload has a `result_type` field and a typed payload. Friend builds render components per `result_type` and a fallback for unknown types. The interface is stable from Phase 4 onward, so frontend work can proceed in parallel.
+The contract between the two tracks:
+- The agent's response payload has a `result_type` field and a typed payload. Frontend builds render components per `result_type` and a fallback for unknown types. The interface is stable from Phase 4 onward.
+- The DB schema is owned by Friend; Dominic's primitives access it through the `VectorStore` protocol (for Pinecone) and a thin SQLAlchemy session layer (for the `query_stats` read-only role). Dominic builds and tests primitives against in-memory / fake implementations until the schema lands, then plugs in.
+
+This split means Dominic's first work focuses on the backend scaffold (non-DB), the LLM router + provider wrappers, the translation math, the `VectorStore` protocol, and the `compute` / `write` primitives + agent loop — all of which can be built and tested without the Postgres schema existing yet.
 
 ## Open questions / risks
 
