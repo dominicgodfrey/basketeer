@@ -1,3 +1,4 @@
+from app.primitives.compute import ComputeRequest, ComputeResponse, compute
 from app.primitives.find_similar import (
     FindSimilarHit,
     FindSimilarRequest,
@@ -7,11 +8,14 @@ from app.primitives.find_similar import (
 from app.primitives.write import WriteContext, WriteResponse, write
 
 __all__ = [
+    "ComputeRequest",
+    "ComputeResponse",
     "FindSimilarHit",
     "FindSimilarRequest",
     "FindSimilarResponse",
     "WriteContext",
     "WriteResponse",
+    "compute",
     "find_similar",
     "write",
 ]
