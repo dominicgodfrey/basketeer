@@ -34,3 +34,15 @@ class Cache(Protocol):
     def delete(self, key: str) -> None:
         """Remove `key`. No-op if absent."""
         ...
+
+    def delete_prefix(self, prefix: str) -> int:
+        """Remove all keys starting with `prefix`. Return the count deleted.
+
+        Wrappers should namespace keys (e.g. `find_similar:<hash>`) so the
+        collaborator's ingestion code can invalidate a whole primitive's cache
+        with one call after refreshing the underlying data.
+
+        On Redis this maps to SCAN + DEL. The in-memory impl is O(n) over all
+        keys; that's fine at our scale.
+        """
+        ...

@@ -94,5 +94,32 @@ def test_non_positive_ttl_raises() -> None:
         cache.set("k", "v", ttl_seconds=-5)
 
 
+def test_delete_prefix_removes_matching_keys() -> None:
+    cache = InMemoryCache()
+    cache.set("find_similar:abc", 1)
+    cache.set("find_similar:def", 2)
+    cache.set("query_stats:xyz", 3)
+    deleted = cache.delete_prefix("find_similar:")
+    assert deleted == 2
+    assert cache.get("find_similar:abc") is None
+    assert cache.get("find_similar:def") is None
+    assert cache.get("query_stats:xyz") == 3
+
+
+def test_delete_prefix_returns_zero_when_no_match() -> None:
+    cache = InMemoryCache()
+    cache.set("a", 1)
+    assert cache.delete_prefix("zzz") == 0
+    assert cache.get("a") == 1
+
+
+def test_delete_prefix_empty_string_matches_all() -> None:
+    cache = InMemoryCache()
+    cache.set("a", 1)
+    cache.set("b", 2)
+    assert cache.delete_prefix("") == 2
+    assert len(cache) == 0
+
+
 def test_in_memory_cache_satisfies_protocol() -> None:
     assert isinstance(InMemoryCache(), Cache)

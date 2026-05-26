@@ -39,6 +39,12 @@ class InMemoryCache:
     def delete(self, key: str) -> None:
         self._store.pop(key, None)
 
+    def delete_prefix(self, prefix: str) -> int:
+        keys = [k for k in self._store if k.startswith(prefix)]
+        for k in keys:
+            del self._store[k]
+        return len(keys)
+
     def clear(self) -> None:
         """Wipe all entries. Convenience for tests and post-ingestion invalidation."""
         self._store.clear()
