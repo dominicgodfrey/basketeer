@@ -21,7 +21,11 @@ To run the app:
 ```powershell
 uvicorn app.main:app --reload --port 8000
 # then visit http://localhost:8000/health
+# or POST a question:
+#   curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d '{"question":"comps for klay thompson"}'
 ```
+
+The `/ask` endpoint is wired end-to-end (classifier → agent loop → tools → response), but until you wire a real LLM provider (see below) it returns the placeholder string from `FakeProvider`.
 
 ---
 
@@ -109,15 +113,85 @@ See `backend/.env.example` for the template. None of these are committed to git.
 
 ## What's already built (no action needed from you)
 
-- FastAPI scaffold with `/health` endpoint
+- FastAPI scaffold with `/health` and `/ask` endpoints
 - Centralized logging (`configure_logging` + `get_logger`) — wires up on app startup
-- `VectorStore` protocol + `InMemoryVectorStore` (tests, dev)
-- `Cache` protocol + `InMemoryCache` with TTL (Redis impl pending `REDIS_URL`)
-- `LLM` task router (env-driven via `MODEL_*` vars) + `LLMProvider` protocol + `FakeProvider`. Supports `anthropic`, `google`, and `openai-compatible` (DeepSeek etc.) — pick at config time
-- `find_similar` primitive (vector + player_id paths)
-- `write` primitive with externalized prompt template at `backend/app/agents/prompts/write.md`
+- `VectorStore` protocol + `InMemoryVectorStore` (tests, dev). Pinecone impl pending account.
+- `Cache` protocol + `InMemoryCache` with TTL + `delete_prefix` (Redis impl pending `REDIS_URL`)
+- Cached wrapper: `cached_find_similar` (24h TTL, sha256-stable keys)
+- `Sandbox` protocol + `RaisingSandbox` (default; fails loudly) + `FakeSandbox` (tests). E2B/Docker impl pending account.
+- LLM task router (env-driven via `MODEL_*` vars), `LLMProvider` protocol, `FakeProvider` with scripted multi-turn responses. Supports `anthropic`, `google`, and `openai-compatible` (DeepSeek etc.) provider types — pick at config time.
+- All four primitives:
+  - `find_similar` (vector + player_id paths)
+  - `write` (uses LLM router, prompt at `backend/app/agents/prompts/write.md`)
+  - `compute` (Pydantic contract; runs through Sandbox protocol — currently `RaisingSandbox` so calls fail until E2B/Docker is wired)
+  - `query_stats` — NOT here; reserved for collaborator's DB track.
 - Stat translation layer (NCAA → NBA, with placeholder coefficients)
 - 50-dim stat profile schema (`STAT_DIMENSIONS`) + `build_stat_profile` (translates then embeds, tracks imputed dims). See `backend/app/data/embed/schema.py` for the full schema with source-API annotations
+- Agent layer:
+  - `ToolSpec` + per-provider translators (`to_anthropic_tools`, `to_openai_tools`, `to_google_tools`)
+  - Tool builders for each primitive (`make_find_similar_tool`, `make_write_tool`, `make_compute_tool`)
+  - **Hand-rolled ReAct loop** (`run_agent`) with guardrails (6 iterations, 30 s wall-clock, 30 K tokens) and structured tool-error recovery. No LangChain dependency.
+  - **Intent classifier** (`classify`) with benign-fallback to agent path on any parse failure
+- DI factories in `app/dependencies.py` (`get_vector_store`, `get_cache`, `get_sandbox`, `get_llm_provider`) — each returns the safe default impl; FastAPI's `dependency_overrides` swap them in tests.
+
+---
+
+## How to wire a real LLM provider (when you've picked one)
+
+Three steps. The router and `Provider` protocol are already in place, so each new vendor is a small isolated module.
+
+### 1. Create `backend/app/llm/providers/<vendor>.py`
+
+Mirror the shape of `backend/app/llm/providers/fake.py`. The class must implement `complete(request: CompletionRequest) -> CompletionResponse`. Translate `request.tools` (already in the provider's native shape, courtesy of the agent layer) to whatever the SDK expects. Translate response tool calls back into our `ToolCall` records.
+
+Per-vendor SDKs:
+- **Anthropic**: `pip install anthropic`. Use `client.messages.create(...)`. Pass `cache_control={"type":"ephemeral"}` on messages where `Message.cache is True`. Populate `cache_read_input_tokens` and `cache_creation_input_tokens` on the response.
+- **Google (Gemini)**: `pip install google-genai` (the new SDK; the old `google-generativeai` is being deprecated). Use `client.models.generate_content(...)`. Tool spec key: `tools=[{"function_declarations":[...]}]`. Google's tool response parsing is non-trivial; expect to spend an hour on it.
+- **OpenAI-compatible** (DeepSeek / Together / Groq / Moonshot / Fireworks): `pip install openai`. Instantiate with `OpenAI(api_key=..., base_url="https://api.deepseek.com")`. Tool spec key: `tools=[{"type":"function","function":{...}}]`. Tool call response is `message.tool_calls` with `id` / `function.name` / `function.arguments` (JSON string — `json.loads` it).
+
+### 2. Add the provider to your dependency factory
+
+Edit `backend/app/dependencies.py`. The current `get_llm_provider()` returns `FakeProvider`. Replace with the real one. Example (DeepSeek):
+
+```python
+from app.llm.providers.openai_compatible import OpenAICompatibleProvider
+
+@lru_cache
+def get_llm_provider() -> LLMProvider:
+    settings = get_settings()
+    return OpenAICompatibleProvider(
+        base_url=settings.openai_compat_base_url,
+        api_key=settings.openai_compat_api_key,
+    )
+```
+
+For multi-provider deployment (e.g. Gemini for classification + Anthropic for planning), `get_llm_provider` should return a `dict[str, LLMProvider]` and the agent loop will look up the right one per `ModelSpec.provider`. That's a small refactor in `app/agents/loop.py` — the comment in `dependencies.py` flags where.
+
+### 3. Set the env vars and the routing table
+
+In `backend/.env`:
+```
+# Pick a provider per task. Use ":cache" suffix for Anthropic (other providers
+# auto-cache server-side and don't need the flag).
+MODEL_AGENT_PLANNING=anthropic:claude-haiku-4-5-20251001:cache
+MODEL_NARRATIVE_WRITE=anthropic:claude-haiku-4-5-20251001:cache
+MODEL_INTENT_CLASSIFIER=openai-compatible:deepseek-chat
+MODEL_TEXT_TO_SQL=openai-compatible:deepseek-chat
+MODEL_CODE_GENERATION=anthropic:claude-haiku-4-5-20251001:cache
+
+ANTHROPIC_API_KEY=...
+OPENAI_COMPAT_BASE_URL=https://api.deepseek.com
+OPENAI_COMPAT_API_KEY=...
+```
+
+### 4. Test
+
+```powershell
+pytest -q              # nothing should break; FakeProvider tests still cover the abstraction
+# then run a live smoke test
+uvicorn app.main:app --reload
+curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" -d '{"question":"comps for klay thompson"}'
+```
 
 ---
 
