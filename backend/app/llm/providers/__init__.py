@@ -3,6 +3,7 @@ from app.llm.providers.base import (
     CompletionResponse,
     LLMProvider,
     Message,
+    ToolCall,
 )
 from app.llm.providers.fake import FakeProvider
 
@@ -12,4 +13,5 @@ __all__ = [
     "FakeProvider",
     "LLMProvider",
     "Message",
+    "ToolCall",
 ]

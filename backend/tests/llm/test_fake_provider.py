@@ -53,3 +53,45 @@ def test_cache_flag_round_trips_in_request_log() -> None:
     recorded = provider.requests[0]
     assert recorded.messages[0].cache is True
     assert recorded.messages[1].cache is False
+
+
+def test_scripted_completion_response_returned_as_is() -> None:
+    """Queued CompletionResponse instances should be returned without re-wrapping
+    so tests can specify tool_calls and stop_reason."""
+    from app.llm.providers import CompletionResponse, ToolCall
+
+    scripted = CompletionResponse(
+        text="",
+        input_tokens=42,
+        output_tokens=7,
+        stop_reason="tool_use",
+        tool_calls=[ToolCall(id="t1", name="find_similar", arguments={"player_id": "x"})],
+    )
+    provider = FakeProvider([scripted])
+    request = CompletionRequest(model="x", messages=[Message(role="user", content="hi")])
+    response = provider.complete(request)
+    assert response is scripted
+    assert response.tool_calls[0].name == "find_similar"
+
+
+def test_mixed_string_and_response_queue() -> None:
+    from app.llm.providers import CompletionResponse, ToolCall
+
+    provider = FakeProvider(
+        [
+            CompletionResponse(
+                text="",
+                input_tokens=0,
+                output_tokens=0,
+                stop_reason="tool_use",
+                tool_calls=[ToolCall(id="t1", name="write", arguments={"question": "?"})],
+            ),
+            "final-text",
+        ]
+    )
+    request = CompletionRequest(model="x", messages=[Message(role="user", content="hi")])
+    first = provider.complete(request)
+    second = provider.complete(request)
+    assert first.stop_reason == "tool_use"
+    assert second.text == "final-text"
+    assert second.stop_reason == "end_turn"
