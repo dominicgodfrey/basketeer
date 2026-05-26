@@ -110,11 +110,14 @@ See `backend/.env.example` for the template. None of these are committed to git.
 ## What's already built (no action needed from you)
 
 - FastAPI scaffold with `/health` endpoint
+- Centralized logging (`configure_logging` + `get_logger`) — wires up on app startup
 - `VectorStore` protocol + `InMemoryVectorStore` (tests, dev)
-- `LLM` task router + provider Protocol + `FakeProvider` (no real SDK wired)
+- `Cache` protocol + `InMemoryCache` with TTL (Redis impl pending `REDIS_URL`)
+- `LLM` task router (env-driven via `MODEL_*` vars) + `LLMProvider` protocol + `FakeProvider`. Supports `anthropic`, `google`, and `openai-compatible` (DeepSeek etc.) — pick at config time
 - `find_similar` primitive (vector + player_id paths)
-- `write` primitive (uses LLM router via FakeProvider in tests)
+- `write` primitive with externalized prompt template at `backend/app/agents/prompts/write.md`
 - Stat translation layer (NCAA → NBA, with placeholder coefficients)
+- 50-dim stat profile schema (`STAT_DIMENSIONS`) + `build_stat_profile` (translates then embeds, tracks imputed dims). See `backend/app/data/embed/schema.py` for the full schema with source-API annotations
 
 ---
 
