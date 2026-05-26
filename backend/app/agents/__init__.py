@@ -1,3 +1,4 @@
+from app.agents.classifier import ClassifierResult, classify
 from app.agents.loop import AgentResult, run_agent
 from app.agents.tool_builders import (
     make_compute_tool,
@@ -14,7 +15,9 @@ from app.agents.tools import (
 
 __all__ = [
     "AgentResult",
+    "ClassifierResult",
     "ToolSpec",
+    "classify",
     "find_tool",
     "make_compute_tool",
     "make_find_similar_tool",
