@@ -17,7 +17,6 @@ from pydantic import BaseModel
 
 from app.agents.tools import ToolSpec
 from app.cache.cache import Cache
-from app.cache.wrappers import cached_find_similar
 from app.llm.providers import LLMProvider
 from app.llm.router import ModelSpec
 from app.primitives import (
@@ -99,6 +98,9 @@ def make_find_similar_tool(
     def invoke(args: BaseModel) -> dict[str, Any]:
         request = _as(args, FindSimilarRequest)
         if cache is not None:
+            # Local import to avoid `cache.wrappers` ↔ `agents.tool_builders` cycle.
+            from app.cache.wrappers import cached_find_similar
+
             response = cached_find_similar(request, store, cache)
         else:
             response = find_similar(request, store)
