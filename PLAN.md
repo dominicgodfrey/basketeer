@@ -30,7 +30,7 @@ User query
    ├── Fast path (trivial queries) → primitive call → response
    └── Agent loop (complex queries) → ReAct loop
         ↓
-        [LangChain agent: Haiku 4.5 w/ prompt caching]
+        [Hand-rolled ReAct loop: Haiku 4.5 (or equivalent) w/ prompt caching]
         ↓ (one primitive per iteration, max 6)
         ├── query_stats(sql)        → Neon Postgres (read-only role)
         ├── find_similar(...)       → Pinecone serverless
@@ -136,7 +136,7 @@ Logging: every code execution is logged with the generated code, inputs, and out
 
 ## LLM layer
 
-LangChain ReAct agent orchestrating the four primitives. **Per-task model routing** — different tasks have different reliability needs, so we route deliberately rather than picking one model for everything.
+Hand-rolled ReAct loop orchestrating the four primitives (no LangChain dependency — see "Agent conventions" in CLAUDE.md for the rationale). **Per-task model routing** — different tasks have different reliability needs, so we route deliberately rather than picking one model for everything. The provider abstraction supports Anthropic, Google, and any OpenAI-compatible endpoint (DeepSeek, Together, Groq, Moonshot, etc.) interchangeably.
 
 | Step | Model | Why |
 |---|---|---|
@@ -197,7 +197,7 @@ Build the four primitives behind clean interfaces, then wire them into a ReAct a
 - `find_similar`: refactor Phase 2's similarity into the primitive contract
 - `compute`: E2B integration, strict input/output contract, allowed-library list
 - `write`: narrative prompt template with example outputs
-- LangChain ReAct agent with prompt caching enabled
+- Hand-rolled ReAct loop with prompt caching enabled on the system prompt
 - Iteration cap, total-time cap, total-token cap as guardrails
 - Tool error handling: structured errors the agent can read and recover from
 
@@ -231,7 +231,7 @@ Build the four primitives behind clean interfaces, then wire them into a ReAct a
 - **DB**: Neon (serverless Postgres, free tier)
 - **Vector store**: Pinecone (serverless, free tier) behind a `VectorStore` protocol
 - **Sandbox**: E2B (managed) for `compute` primitive
-- **LLM**: LangChain ReAct agent. Claude Haiku 4.5 via Anthropic SDK; Gemini 2.5 Flash / Flash-Lite via Google AI SDK
+- **LLM**: Hand-rolled ReAct loop (no LangChain dependency). Provider-agnostic abstraction (`LLMProvider` protocol) supports Anthropic, Google, and OpenAI-compatible endpoints (DeepSeek, Together, Groq, Moonshot, etc.) interchangeably; the active model is configured per-task via `MODEL_<TASK>` env vars. See `backend/app/llm/router.py`.
 - **Frontend**: React + Vite, Tailwind, shadcn/ui
 - **Hosting**: Railway or Fly.io (backend), Vercel (frontend)
 - **CI**: GitHub Actions

@@ -14,7 +14,7 @@ Read `PLAN.md` for the full architecture and phased build order. This file is sh
 - Neon (serverless Postgres, free tier) for relational data
 - Pinecone (serverless, free tier) for vector similarity, abstracted behind a `VectorStore` protocol
 - E2B for sandboxed Python execution in the `compute` primitive
-- LangChain ReAct agent
+- Hand-rolled ReAct loop (no LangChain dependency); tools defined as Pydantic `ToolSpec` records, translated per-provider via `to_anthropic_tools` / `to_openai_tools` / `to_google_tools`
 - Multi-provider LLM routing: Claude Haiku 4.5 for reasoning, Gemini 2.5 Flash / Flash-Lite for cheap structured steps
 - `sqlglot` for SQL parsing and validation
 - React + Vite + Tailwind + shadcn/ui for frontend
@@ -172,12 +172,15 @@ Don't cache LLM outputs directly — too non-deterministic to be useful. Cache t
 - The Pinecone implementation is the default. Don't import the Pinecone SDK anywhere outside `similarity/pinecone_store.py`.
 - Pinecone metadata fields are first-class for filtering: `player_id`, `season`, `league`, `position`, `team_id`, `is_current_fa`. Filter in metadata, not in Python.
 
-## LangChain conventions
+## Agent conventions
 
-- Use LangChain's tool decorator pattern. Tools take Pydantic input models and return Pydantic output models.
-- Each tool's docstring is the agent's API contract. Write them carefully.
-- System prompts live in `agents/prompts/` as `.md` files, not inline in code.
-- Don't use LangChain's higher-level abstractions where they obscure cost (some agents make hidden LLM calls). Stay close to the metal so you can see and control every call.
+The agent is hand-rolled — no LangChain dependency. The decision lives in `backend/app/agents/loop.py`; the tool layer (`backend/app/agents/tools.py`, `tool_builders.py`) implements the "tool decorator pattern" directly with stdlib + Pydantic so the system stays portable across Anthropic, Google, and any OpenAI-compatible provider (DeepSeek, Together, Groq, Moonshot, etc.).
+
+- Tools are defined as `ToolSpec(name, description, args_schema, invoke)` records. `args_schema` is a Pydantic BaseModel — its `.model_json_schema()` is what the LLM sees.
+- Tool descriptions are the agent's API contract. Write them carefully — they live as constants in `app/agents/tool_builders.py` (`FIND_SIMILAR_DESCRIPTION`, etc.) so they're versioned with the code.
+- System prompts (agent system prompt, classifier system prompt, write prompt) live in `app/agents/prompts/` as `.md` files. Never inline multi-line prompt strings in business logic.
+- Provider-specific tool formats: `to_anthropic_tools` / `to_openai_tools` / `to_google_tools` in `app/agents/tools.py`. Add new providers by registering a formatter in `_TOOL_FORMATTERS` (`app/agents/loop.py`).
+- The loop has hard guardrails: 6 iterations, 30 s wall-clock, 30 K tokens. On a limit hit the loop returns `partial=True`. Tool errors (unknown tool, validation failure, exception) come back as structured error dicts the LLM can read and recover from — never raised.
 
 ## Frontend conventions
 
@@ -191,7 +194,7 @@ Don't cache LLM outputs directly — too non-deterministic to be useful. Cache t
 
 - `pytest` for backend.
 - Integration tests can hit a test Postgres (docker compose).
-- Don't test against the live LLM in CI — mock the LangChain client. Run live LLM evals manually before merging significant agent changes.
+- Don't test against the live LLM in CI — use `FakeProvider` (`app/llm/providers/fake.py`). It supports both fixed responses and scripted multi-turn responses with tool calls. Run live LLM evals manually before merging significant agent changes.
 - Always test SQL validation against attack inputs (injection attempts, multi-statement, DDL).
 - Always test sandbox contract violations (network access attempts, fs access, infinite loops, OOM).
 
