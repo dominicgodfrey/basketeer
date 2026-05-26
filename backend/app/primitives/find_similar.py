@@ -18,7 +18,10 @@ from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
+from app.logging_setup import get_logger
 from app.similarity import VectorStore
+
+logger = get_logger(__name__)
 
 MAX_TOP_K = 50
 
@@ -84,4 +87,11 @@ def find_similar(request: FindSimilarRequest, store: VectorStore) -> FindSimilar
         raw_results = [r for r in raw_results if r.id != request.player_id][: request.top_k]
 
     hits = [FindSimilarHit(id=r.id, score=r.score, metadata=r.metadata) for r in raw_results]
+    logger.info(
+        "find_similar source=%s top_k=%d filter=%s hits=%d",
+        source,
+        request.top_k,
+        request.filter or {},
+        len(hits),
+    )
     return FindSimilarResponse(hits=hits, query_source=source)

@@ -17,6 +17,9 @@ from pydantic import BaseModel, Field
 from app.agents.prompts import load_prompt
 from app.llm.providers import CompletionRequest, LLMProvider, Message
 from app.llm.router import ModelSpec
+from app.logging_setup import get_logger
+
+logger = get_logger(__name__)
 
 DEFAULT_MAX_TOKENS = 2048
 DEFAULT_TEMPERATURE = 0.5
@@ -79,7 +82,23 @@ def write(
         max_tokens=max_tokens,
         temperature=temperature,
     )
+    logger.info(
+        "write.invoke model=%s caching=%s findings=%d data=%s constraints=%d",
+        model_spec.model_id,
+        model_spec.supports_prompt_caching,
+        len(context.findings),
+        "yes" if context.data else "no",
+        len(context.constraints),
+    )
     response = provider.complete(request)
+    logger.info(
+        "write.complete model=%s in=%d out=%d cache_read=%d cache_create=%d",
+        model_spec.model_id,
+        response.input_tokens,
+        response.output_tokens,
+        response.cache_read_input_tokens,
+        response.cache_creation_input_tokens,
+    )
     return WriteResponse(
         text=response.text,
         input_tokens=response.input_tokens,
