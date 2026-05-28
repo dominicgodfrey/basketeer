@@ -44,3 +44,7 @@ dist/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Claude Code (local-only; do not commit)
+CLAUDE.md
+.claude/
